@@ -15,3 +15,19 @@ A complete RabbitMQ training project with .NET 8, designed as a professional por
 1. Start RabbitMQ with Docker.
 2. Run the Consumer project.
 3. Run the Producer project.
+
+## Day 2 – Queues, Exchanges, and Direct Exchange
+
+### Implemented
+
+* Defined a Direct Exchange
+* Created durable queues
+* Configured bindings with routing keys
+* Published messages based on different routing keys
+* Consumed messages through separate consumers
+
+### Key Concepts Learned
+
+* The difference between a Queue and an Exchange
+* How a Direct Exchange works
+* Bindings and Routing Keys

@@ -1,9 +1,9 @@
 ﻿using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System.Text;
-using System.Threading.Tasks; // Required for Task.CompletedTask
+using System.Threading.Tasks;
 
-Console.WriteLine("=== RabbitMQ Consumer Started ===");
+Console.WriteLine("=== RabbitMQ Consumer - Direct Exchange ===");
 
 var factory = new ConnectionFactory()
 {
@@ -14,38 +14,40 @@ var factory = new ConnectionFactory()
 
 // Use async methods and 'await using' for proper disposal
 await using var connection = await factory.CreateConnectionAsync();
-
-// CreateModel() is now CreateChannelAsync()
 await using var channel = await connection.CreateChannelAsync();
 
-const string queueName = "hello.queue";
+const string exchangeName = "order.direct.exchange";
+const string queuePayment = "order.queue.payment";
+const string queueShipping = "order.queue.shipping";
 
-await channel.QueueDeclareAsync(queue: queueName,
-                     durable: false,
-                     exclusive: false,
-                     autoDelete: false,
-                     arguments: null);
+// Declare queues asynchronously
+await channel.QueueDeclareAsync(queue: queuePayment, durable: true, exclusive: false, autoDelete: false);
+await channel.QueueDeclareAsync(queue: queueShipping, durable: true, exclusive: false, autoDelete: false);
 
-Console.WriteLine(" [*] Waiting for messages...");
-
-// Use AsyncEventingBasicConsumer for v7
-var consumer = new AsyncEventingBasicConsumer(channel);
-
-// Received is now ReceivedAsync and expects a Task return
-consumer.ReceivedAsync += (model, ea) =>
+// Payment Consumer configuration
+var consumerPayment = new AsyncEventingBasicConsumer(channel);
+consumerPayment.ReceivedAsync += (model, ea) =>
 {
     var body = ea.Body.ToArray();
     var message = Encoding.UTF8.GetString(body);
-    Console.WriteLine($" [✓] Message received: {message}");
-
-    // Return Task.CompletedTask because we are not using 'await' inside this lambda
+    Console.WriteLine($" [✓] Payment received: {message}");
     return Task.CompletedTask;
 };
 
-// BasicConsume is now BasicConsumeAsync
-await channel.BasicConsumeAsync(queue: queueName,
-                     autoAck: true,
-                     consumer: consumer);
+// Shipping Consumer configuration
+var consumerShipping = new AsyncEventingBasicConsumer(channel);
+consumerShipping.ReceivedAsync += (model, ea) =>
+{
+    var body = ea.Body.ToArray();
+    var message = Encoding.UTF8.GetString(body);
+    Console.WriteLine($" [✓] Shipping received: {message}");
+    return Task.CompletedTask;
+};
 
+// Start consuming from both queues asynchronously
+await channel.BasicConsumeAsync(queue: queuePayment, autoAck: true, consumer: consumerPayment);
+await channel.BasicConsumeAsync(queue: queueShipping, autoAck: true, consumer: consumerShipping);
+
+Console.WriteLine(" [*] Consumer is listening to the payment and shipping queues...");
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();

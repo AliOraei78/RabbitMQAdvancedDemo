@@ -1,7 +1,7 @@
 ﻿using RabbitMQ.Client;
 using System.Text;
 
-Console.WriteLine("=== RabbitMQ Producer Started ===");
+Console.WriteLine("=== RabbitMQ Producer - Direct Exchange ===");
 
 var factory = new ConnectionFactory()
 {
@@ -12,27 +12,45 @@ var factory = new ConnectionFactory()
 
 // Use async methods and 'await using' for proper disposal
 await using var connection = await factory.CreateConnectionAsync();
-
-// CreateModel() is now CreateChannelAsync()
 await using var channel = await connection.CreateChannelAsync();
 
-const string queueName = "hello.queue";
+// Declare Direct Exchange
+const string exchangeName = "order.direct.exchange";
+const string queueName1 = "order.queue.payment";
+const string queueName2 = "order.queue.shipping";
 
-// QueueDeclare is now QueueDeclareAsync
-await channel.QueueDeclareAsync(queue: queueName,
-                                durable: false,
-                                exclusive: false,
-                                autoDelete: false,
-                                arguments: null);
+// Exchange, queue, and binding declarations are now async
+await channel.ExchangeDeclareAsync(exchange: exchangeName, type: ExchangeType.Direct, durable: true);
 
-string message = "Hello! This is the first message from the Producer. - " + DateTime.Now.ToString("HH:mm:ss");
-var body = Encoding.UTF8.GetBytes(message);
+await channel.QueueDeclareAsync(queue: queueName1, durable: true, exclusive: false, autoDelete: false);
+await channel.QueueDeclareAsync(queue: queueName2, durable: true, exclusive: false, autoDelete: false);
 
-// BasicPublish is now BasicPublishAsync
-await channel.BasicPublishAsync(exchange: string.Empty,
-                                routingKey: queueName,
-                                body: body);
+await channel.QueueBindAsync(queue: queueName1, exchange: exchangeName, routingKey: "payment");
+await channel.QueueBindAsync(queue: queueName2, exchange: exchangeName, routingKey: "shipping");
 
-Console.WriteLine($" [x] Message sent: {message}");
-Console.WriteLine("Press any key to exit...");
-Console.ReadKey();
+Console.WriteLine("Exchange and queues have been created successfully.");
+
+while (true)
+{
+    Console.WriteLine("\nEnter order type (payment / shipping) or 'exit' to quit:");
+    string? type = Console.ReadLine()?.ToLower();
+
+    if (type == "exit") break;
+    if (type != "payment" && type != "shipping")
+    {
+        Console.WriteLine("Only 'payment' or 'shipping' are allowed!");
+        continue;
+    }
+
+    string message = $"New Order - Type: {type.ToUpper()} - Time: {DateTime.Now:HH:mm:ss}";
+    var body = Encoding.UTF8.GetBytes(message);
+
+    // BasicPublish is now BasicPublishAsync
+    await channel.BasicPublishAsync(exchange: exchangeName,
+                                    routingKey: type,
+                                    body: body);
+
+    Console.WriteLine($" [x] Message sent to {type.ToUpper()}: {message}");
+}
+
+Console.WriteLine("Producer stopped.");
