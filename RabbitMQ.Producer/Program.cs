@@ -247,7 +247,6 @@ while (true)
 }
 
 Console.WriteLine("Producer stopped.");
-*/
 
 using RabbitMQ.Client;
 using System.Text;
@@ -291,6 +290,70 @@ while (true)
 
     // BasicPublish is now BasicPublishAsync
     await channel.BasicPublishAsync(exchange: exchangeName,
+                                    routingKey: "order.process",
+                                    body: body);
+
+    Console.WriteLine($" [x] Order #{messageId} sent.");
+}
+
+Console.WriteLine("Producer stopped.");
+*/
+
+using RabbitMQ.Client;
+using System.Text;
+using System.Collections.Generic;
+
+Console.WriteLine("=== RabbitMQ Producer - Dead Letter Exchange Demo ===");
+
+var factory = new ConnectionFactory()
+{
+    HostName = "localhost",
+    UserName = "guest",
+    Password = "guest"
+};
+
+await using var connection = await factory.CreateConnectionAsync();
+await using var channel = await connection.CreateChannelAsync();
+
+const string mainExchange = "order.main.exchange";
+const string mainQueue = "order.main.queue";
+const string dlxExchange = "order.dlx.exchange"; // Added to match consumer
+
+// Declare the main exchange
+await channel.ExchangeDeclareAsync(exchange: mainExchange, type: ExchangeType.Direct, durable: true);
+
+// MATCH THE CONSUMER: Declare the queue with the exact same DLX arguments
+var mainQueueArgs = new Dictionary<string, object?>
+{
+    { "x-dead-letter-exchange", dlxExchange },
+    { "x-dead-letter-routing-key", "order.failed" }
+};
+
+await channel.QueueDeclareAsync(queue: mainQueue,
+                                durable: true,
+                                exclusive: false,
+                                autoDelete: false,
+                                arguments: mainQueueArgs);
+
+await channel.QueueBindAsync(queue: mainQueue, exchange: mainExchange, routingKey: "order.process");
+
+Console.WriteLine("Main Exchange and Queue are ready.");
+
+int messageId = 0;
+
+while (true)
+{
+    Console.WriteLine("\nEnter order text (or 'exit' to quit):");
+    string? input = Console.ReadLine();
+
+    if (input?.ToLower() == "exit") break;
+    if (string.IsNullOrWhiteSpace(input)) continue;
+
+    messageId++;
+    string message = $"Order #{messageId}: {input} - Time: {DateTime.Now:HH:mm:ss}";
+    var body = Encoding.UTF8.GetBytes(message);
+
+    await channel.BasicPublishAsync(exchange: mainExchange,
                                     routingKey: "order.process",
                                     body: body);
 

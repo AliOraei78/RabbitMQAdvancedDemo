@@ -244,7 +244,6 @@ await channel.BasicConsumeAsync(queue: queueName, autoAck: true, consumer: consu
 Console.WriteLine(" [*] Consumer is ready to receive messages...");
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();
-*/
 
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -313,5 +312,95 @@ await channel.BasicConsumeAsync(queue: queueName,
 
 Console.WriteLine(" [*] Consumer started with Manual Acknowledgement.");
 Console.WriteLine("Tip: Include the word 'error' in a message to simulate a processing failure.");
+Console.WriteLine("Press any key to exit...");
+Console.ReadKey();
+*/
+
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using System.Text;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+
+Console.WriteLine("=== RabbitMQ Consumer - Dead Letter Exchange ===");
+
+var factory = new ConnectionFactory()
+{
+    HostName = "localhost",
+    UserName = "guest",
+    Password = "guest"
+};
+
+// Use async methods and 'await using' for proper disposal
+await using var connection = await factory.CreateConnectionAsync();
+await using var channel = await connection.CreateChannelAsync();
+
+// ====================== Dead Letter Exchange Configuration ======================
+const string dlxExchange = "order.dlx.exchange";
+const string dlqQueue = "order.deadletter.queue";
+
+// Topology declarations are now async
+await channel.ExchangeDeclareAsync(exchange: dlxExchange, type: ExchangeType.Direct, durable: true);
+await channel.QueueDeclareAsync(queue: dlqQueue, durable: true, exclusive: false, autoDelete: false);
+await channel.QueueBindAsync(queue: dlqQueue, exchange: dlxExchange, routingKey: "order.failed");
+
+// ====================== Main Queue with DLX ======================
+const string mainQueue = "order.main.queue";
+
+// RabbitMQ.Client v7 handles arguments using Dictionary<string, object?>
+var mainQueueArgs = new Dictionary<string, object?>
+{
+    { "x-dead-letter-exchange", dlxExchange },
+    { "x-dead-letter-routing-key", "order.failed" }
+};
+
+await channel.QueueDeclareAsync(queue: mainQueue,
+                                durable: true,
+                                exclusive: false,
+                                autoDelete: false,
+                                arguments: mainQueueArgs);
+
+Console.WriteLine("Dead Letter Exchange and Queue have been configured.");
+
+// ====================== Consumer ======================
+// Use AsyncEventingBasicConsumer for v7
+var consumer = new AsyncEventingBasicConsumer(channel);
+
+// Mark lambda as 'async' to allow awaiting acknowledgement methods inside
+consumer.ReceivedAsync += async (model, ea) =>
+{
+    var body = ea.Body.ToArray();
+    var message = Encoding.UTF8.GetString(body);
+
+    try
+    {
+        Console.WriteLine($" [📥] Received: {message}");
+
+        if (message.Contains("error", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine(" [✗] Processing failed - message will be sent to the Dead Letter Queue.");
+
+            // BasicNack is now BasicNackAsync. Requeue: false drops it into the DLX route.
+            await channel.BasicNackAsync(deliveryTag: ea.DeliveryTag, multiple: false, requeue: false);
+            return;
+        }
+
+        Console.WriteLine(" [✓] Processed successfully.");
+
+        // BasicAck is now BasicAckAsync
+        await channel.BasicAckAsync(deliveryTag: ea.DeliveryTag, multiple: false);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($" [⚠] Error: {ex.Message}");
+        await channel.BasicNackAsync(deliveryTag: ea.DeliveryTag, multiple: false, requeue: false);
+    }
+};
+
+// Start consuming messages asynchronously
+await channel.BasicConsumeAsync(queue: mainQueue, autoAck: false, consumer: consumer);
+
+Console.WriteLine(" [*] Main consumer is running.");
+Console.WriteLine("Tip: To test the DLQ, include the word 'error' in a message.");
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();

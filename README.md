@@ -89,3 +89,18 @@ A complete RabbitMQ training project with .NET 8, designed as a professional por
 * The importance of Manual Acknowledgements in production environments
 * Preventing message loss
 * Controlling processing flow and implementing basic retry mechanisms
+
+## Day 7 - Dead Letter Exchange (DLX) and Dead Letter Queue
+
+### Completed:
+
+* Configured a Dead Letter Exchange (DLX) and Dead Letter Queue (DLQ)
+* Configured the main queue with the `x-dead-letter-exchange` argument
+* Routed failed messages to the DLQ using `BasicNack` with `requeue: false`
+* Implemented dead-letter message handling
+
+### Key Concepts:
+
+* Preventing message loss
+* Isolating problematic messages from normal processing
+* Establishing the foundation for a Retry Mechanism
