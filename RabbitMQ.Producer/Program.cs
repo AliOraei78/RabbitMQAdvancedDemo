@@ -1,7 +1,8 @@
-﻿using RabbitMQ.Client;
+﻿/*
+using RabbitMQ.Client;
 using System.Text;
 
-Console.WriteLine("=== RabbitMQ Producer - Direct Exchange ===");
+Console.WriteLine("=== RabbitMQ Producer - Fanout Exchange (Publish/Subscribe) ===");
 
 var factory = new ConnectionFactory()
 {
@@ -14,43 +15,85 @@ var factory = new ConnectionFactory()
 await using var connection = await factory.CreateConnectionAsync();
 await using var channel = await connection.CreateChannelAsync();
 
-// Declare Direct Exchange
-const string exchangeName = "order.direct.exchange";
-const string queueName1 = "order.queue.payment";
-const string queueName2 = "order.queue.shipping";
+const string exchangeName = "order.fanout.exchange";
 
-// Exchange, queue, and binding declarations are now async
-await channel.ExchangeDeclareAsync(exchange: exchangeName, type: ExchangeType.Direct, durable: true);
+// ExchangeDeclare is now ExchangeDeclareAsync
+await channel.ExchangeDeclareAsync(exchange: exchangeName,
+                                   type: ExchangeType.Fanout,
+                                   durable: true);
 
-await channel.QueueDeclareAsync(queue: queueName1, durable: true, exclusive: false, autoDelete: false);
-await channel.QueueDeclareAsync(queue: queueName2, durable: true, exclusive: false, autoDelete: false);
+Console.WriteLine($"Fanout Exchange created: {exchangeName}");
 
-await channel.QueueBindAsync(queue: queueName1, exchange: exchangeName, routingKey: "payment");
-await channel.QueueBindAsync(queue: queueName2, exchange: exchangeName, routingKey: "shipping");
-
-Console.WriteLine("Exchange and queues have been created successfully.");
+int messageCount = 0;
 
 while (true)
 {
-    Console.WriteLine("\nEnter order type (payment / shipping) or 'exit' to quit:");
-    string? type = Console.ReadLine()?.ToLower();
+    Console.WriteLine("\nEnter a message (or 'exit' to quit):");
+    string? input = Console.ReadLine();
 
-    if (type == "exit") break;
-    if (type != "payment" && type != "shipping")
-    {
-        Console.WriteLine("Only 'payment' or 'shipping' are allowed!");
-        continue;
-    }
+    if (input?.ToLower() == "exit") break;
+    if (string.IsNullOrWhiteSpace(input)) continue;
 
-    string message = $"New Order - Type: {type.ToUpper()} - Time: {DateTime.Now:HH:mm:ss}";
+    messageCount++;
+    string message = $"Order Event #{messageCount}: {input} - Time: {DateTime.Now:HH:mm:ss}";
     var body = Encoding.UTF8.GetBytes(message);
 
     // BasicPublish is now BasicPublishAsync
     await channel.BasicPublishAsync(exchange: exchangeName,
-                                    routingKey: type,
+                                    routingKey: string.Empty, // Ignored in Fanout exchanges
                                     body: body);
 
-    Console.WriteLine($" [x] Message sent to {type.ToUpper()}: {message}");
+    Console.WriteLine($" [x] Message broadcast to all subscribers: {message}");
+}
+
+Console.WriteLine("Producer stopped.");
+*/
+
+using RabbitMQ.Client;
+using System.Text;
+
+Console.WriteLine("=== RabbitMQ Producer - Fanout Exchange (Publish/Subscribe) ===");
+
+var factory = new ConnectionFactory()
+{
+    HostName = "localhost",
+    UserName = "guest",
+    Password = "guest"
+};
+
+// Use async methods and 'await using' for proper disposal
+await using var connection = await factory.CreateConnectionAsync();
+await using var channel = await connection.CreateChannelAsync();
+
+const string exchangeName = "order.fanout.exchange";
+
+// ExchangeDeclare is now ExchangeDeclareAsync
+await channel.ExchangeDeclareAsync(exchange: exchangeName,
+                                   type: ExchangeType.Fanout,
+                                   durable: true);
+
+Console.WriteLine($"Fanout Exchange created: {exchangeName}");
+
+int messageCount = 0;
+
+while (true)
+{
+    Console.WriteLine("\nEnter a message (or 'exit' to quit):");
+    string? input = Console.ReadLine();
+
+    if (input?.ToLower() == "exit") break;
+    if (string.IsNullOrWhiteSpace(input)) continue;
+
+    messageCount++;
+    string message = $"Order Event #{messageCount}: {input} - Time: {DateTime.Now:HH:mm:ss}";
+    var body = Encoding.UTF8.GetBytes(message);
+
+    // BasicPublish is now BasicPublishAsync
+    await channel.BasicPublishAsync(exchange: exchangeName,
+                                    routingKey: string.Empty, // Ignored in Fanout exchanges
+                                    body: body);
+
+    Console.WriteLine($" [x] Message broadcast to all subscribers: {message}");
 }
 
 Console.WriteLine("Producer stopped.");

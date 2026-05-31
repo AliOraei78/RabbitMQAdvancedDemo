@@ -31,3 +31,17 @@ A complete RabbitMQ training project with .NET 8, designed as a professional por
 * The difference between a Queue and an Exchange
 * How a Direct Exchange works
 * Bindings and Routing Keys
+
+## Day 3 – Fanout Exchange and the Publish/Subscribe Pattern
+
+### Implemented
+
+* Implemented a Fanout Exchange
+* Broadcast messages to multiple queues
+* Created multiple consumers for a single exchange
+* Applied the Publish/Subscribe messaging pattern
+
+### Key Concepts
+
+* The difference between Fanout and Direct Exchanges
+* Broadcast use cases (Notifications, Logging, Analytics)
