@@ -97,7 +97,7 @@ while (true)
 }
 
 Console.WriteLine("Producer stopped.");
-*/
+
 using RabbitMQ.Client;
 using System.Text;
 
@@ -167,6 +167,83 @@ while (true)
                                     body: body);
 
     Console.WriteLine($" [x] Message sent with Routing Key '{routingKey}'.");
+}
+
+Console.WriteLine("Producer stopped.");
+*/
+
+using RabbitMQ.Client;
+using RabbitMQ.Client.Exceptions;
+using System.Text;
+using System.Threading;
+
+Console.WriteLine("=== RabbitMQ Producer - Publisher Confirms ===");
+
+var factory = new ConnectionFactory()
+{
+    HostName = "localhost",
+    UserName = "guest",
+    Password = "guest"
+};
+
+// Use async methods and 'await using' for proper disposal
+await using var connection = await factory.CreateConnectionAsync();
+
+// In v7, Publisher Confirms are configured declaratively using CreateChannelOptions
+var channelOptions = new CreateChannelOptions(
+    publisherConfirmationsEnabled: true,
+    publisherConfirmationTrackingEnabled: true
+);
+
+await using var channel = await connection.CreateChannelAsync(channelOptions);
+
+const string exchangeName = "order.confirm.exchange";
+const string queueName = "order.confirm.queue";
+
+// Topology setups are now fully async
+await channel.ExchangeDeclareAsync(exchange: exchangeName, type: ExchangeType.Direct, durable: true);
+await channel.QueueDeclareAsync(queue: queueName, durable: true, exclusive: false, autoDelete: false);
+await channel.QueueBindAsync(queue: queueName, exchange: exchangeName, routingKey: "order.created");
+
+Console.WriteLine("Publisher Confirms enabled.");
+
+int messageId = 0;
+
+while (true)
+{
+    Console.WriteLine("\nEnter a message (or 'exit' to quit):");
+    string? input = Console.ReadLine();
+
+    if (input?.ToLower() == "exit") break;
+    if (string.IsNullOrWhiteSpace(input)) continue;
+
+    messageId++;
+    string message = $"Order #{messageId}: {input} - Time: {DateTime.Now:HH:mm:ss}";
+    var body = Encoding.UTF8.GetBytes(message);
+
+    // Set a 5-second confirmation timeout using a CancellationToken
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+    try
+    {
+        // In v7, awaiting BasicPublishAsync automatically waits for the broker's Ack response
+        await channel.BasicPublishAsync(exchange: exchangeName,
+                                        routingKey: "order.created",
+                                        body: body,
+                                        cancellationToken: cts.Token);
+
+        Console.WriteLine($" [✓] Message #{messageId} was successfully confirmed (Delivered to RabbitMQ)");
+    }
+    catch (PublishException)
+    {
+        // Caught if the broker explicitly rejects (Nacks) or returns the message
+        Console.WriteLine($" [✗] Message #{messageId} was not confirmed! Please resend it.");
+    }
+    catch (OperationCanceledException)
+    {
+        // Caught if the 5-second timeout expires before the broker answers
+        Console.WriteLine($" [✗] Message #{messageId} confirmation timed out!");
+    }
 }
 
 Console.WriteLine("Producer stopped.");

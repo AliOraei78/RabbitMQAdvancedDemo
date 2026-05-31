@@ -59,3 +59,18 @@ A complete RabbitMQ training project with .NET 8, designed as a professional por
 
 * The advantages of Topic Exchange over Direct and Fanout Exchanges
 * Applications in Event-Driven Systems
+
+## Day 5 – Publisher Confirms
+
+### Implemented
+
+* Enabled Publisher Confirms
+* Used `ConfirmSelect()` and `WaitForConfirms()`
+* Verified successful or failed message delivery
+* Improved producer reliability
+
+### Key Concepts
+
+* Guaranteeing message delivery to RabbitMQ
+* Handling network and broker failures
+* The difference between Synchronous and Asynchronous Confirms

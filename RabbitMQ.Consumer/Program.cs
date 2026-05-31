@@ -126,7 +126,7 @@ await channel.BasicConsumeAsync(queue: queueShipping, autoAck: true, consumer: c
 Console.WriteLine(" [*] Three consumers are ready to receive broadcast messages...");
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();
-*/
+
 
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -199,5 +199,48 @@ await channel.BasicConsumeAsync(queue: "order.payment.queue", autoAck: true, con
 await channel.BasicConsumeAsync(queue: "order.shipping.queue", autoAck: true, consumer: consumerShipping);
 
 Console.WriteLine(" [*] Consumers are active with Topic-based routing patterns...");
+Console.WriteLine("Press any key to exit...");
+Console.ReadKey();
+*/
+
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using System.Text;
+using System.Threading.Tasks;
+
+Console.WriteLine("=== RabbitMQ Consumer - Publisher Confirms Demo ===");
+
+var factory = new ConnectionFactory()
+{
+    HostName = "localhost",
+    UserName = "guest",
+    Password = "guest"
+};
+
+// Use async methods and 'await using' for proper disposal
+await using var connection = await factory.CreateConnectionAsync();
+await using var channel = await connection.CreateChannelAsync();
+
+const string queueName = "order.confirm.queue";
+
+// Queue declaration is now async
+await channel.QueueDeclareAsync(queue: queueName, durable: true, exclusive: false, autoDelete: false);
+
+// Use AsyncEventingBasicConsumer for v7
+var consumer = new AsyncEventingBasicConsumer(channel);
+consumer.ReceivedAsync += (model, ea) =>
+{
+    var body = ea.Body.ToArray();
+    var message = Encoding.UTF8.GetString(body);
+    Console.WriteLine($" [✓] Message received: {message}");
+
+    // Return Task.CompletedTask because we are not awaiting anything inside this lambda
+    return Task.CompletedTask;
+};
+
+// BasicConsume is now BasicConsumeAsync
+await channel.BasicConsumeAsync(queue: queueName, autoAck: true, consumer: consumer);
+
+Console.WriteLine(" [*] Consumer is ready to receive messages...");
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();
