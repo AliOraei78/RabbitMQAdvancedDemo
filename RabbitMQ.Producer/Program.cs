@@ -170,7 +170,7 @@ while (true)
 }
 
 Console.WriteLine("Producer stopped.");
-*/
+
 
 using RabbitMQ.Client;
 using RabbitMQ.Client.Exceptions;
@@ -244,6 +244,57 @@ while (true)
         // Caught if the 5-second timeout expires before the broker answers
         Console.WriteLine($" [✗] Message #{messageId} confirmation timed out!");
     }
+}
+
+Console.WriteLine("Producer stopped.");
+*/
+
+using RabbitMQ.Client;
+using System.Text;
+
+Console.WriteLine("=== RabbitMQ Producer - Consumer Acknowledgement Demo ===");
+
+var factory = new ConnectionFactory()
+{
+    HostName = "localhost",
+    UserName = "guest",
+    Password = "guest"
+};
+
+// Use async methods and 'await using' for proper disposal
+await using var connection = await factory.CreateConnectionAsync();
+await using var channel = await connection.CreateChannelAsync();
+
+const string exchangeName = "order.ack.exchange";
+const string queueName = "order.ack.queue";
+
+// Topology setups are now fully async
+await channel.ExchangeDeclareAsync(exchange: exchangeName, type: ExchangeType.Direct, durable: true);
+await channel.QueueDeclareAsync(queue: queueName, durable: true, exclusive: false, autoDelete: false);
+await channel.QueueBindAsync(queue: queueName, exchange: exchangeName, routingKey: "order.process");
+
+Console.WriteLine("Exchange and Queue are ready.");
+
+int messageId = 0;
+
+while (true)
+{
+    Console.WriteLine("\nEnter the order details (or 'exit' to quit):");
+    string? input = Console.ReadLine();
+
+    if (input?.ToLower() == "exit") break;
+    if (string.IsNullOrWhiteSpace(input)) continue;
+
+    messageId++;
+    string message = $"Order #{messageId}: {input} - Time: {DateTime.Now:HH:mm:ss}";
+    var body = Encoding.UTF8.GetBytes(message);
+
+    // BasicPublish is now BasicPublishAsync
+    await channel.BasicPublishAsync(exchange: exchangeName,
+                                    routingKey: "order.process",
+                                    body: body);
+
+    Console.WriteLine($" [x] Order #{messageId} sent.");
 }
 
 Console.WriteLine("Producer stopped.");

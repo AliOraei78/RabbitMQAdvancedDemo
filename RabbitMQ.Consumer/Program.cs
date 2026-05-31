@@ -201,7 +201,7 @@ await channel.BasicConsumeAsync(queue: "order.shipping.queue", autoAck: true, co
 Console.WriteLine(" [*] Consumers are active with Topic-based routing patterns...");
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();
-*/
+
 
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -242,5 +242,76 @@ consumer.ReceivedAsync += (model, ea) =>
 await channel.BasicConsumeAsync(queue: queueName, autoAck: true, consumer: consumer);
 
 Console.WriteLine(" [*] Consumer is ready to receive messages...");
+Console.WriteLine("Press any key to exit...");
+Console.ReadKey();
+*/
+
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using System.Text;
+
+Console.WriteLine("=== RabbitMQ Consumer - Manual Ack / Nack / Requeue ===");
+
+var factory = new ConnectionFactory()
+{
+    HostName = "localhost",
+    UserName = "guest",
+    Password = "guest"
+};
+
+// Use async methods and 'await using' for proper disposal
+await using var connection = await factory.CreateConnectionAsync();
+await using var channel = await connection.CreateChannelAsync();
+
+const string queueName = "order.ack.queue";
+
+// Proactively declare the queue asynchronously
+await channel.QueueDeclareAsync(queue: queueName, durable: true, exclusive: false, autoDelete: false);
+
+// Use AsyncEventingBasicConsumer for v7
+var consumer = new AsyncEventingBasicConsumer(channel);
+
+// Marked lambda as 'async' because we will await acknowledgement methods inside
+consumer.ReceivedAsync += async (model, ea) =>
+{
+    var body = ea.Body.ToArray();
+    var message = Encoding.UTF8.GetString(body);
+
+    try
+    {
+        Console.WriteLine($" [📥] Message received: {message}");
+
+        // Simulate processing
+        if (message.Contains("error", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine(" [✗] Processing failed! Message will be rejected.");
+
+            // Reject + Requeue = Return the message to the queue (Async in v7)
+            await channel.BasicRejectAsync(deliveryTag: ea.DeliveryTag, requeue: true);
+            return;
+        }
+
+        // Successful processing
+        Console.WriteLine(" [✓] Processing completed successfully.");
+
+        // Manual Ack (Async in v7)
+        await channel.BasicAckAsync(deliveryTag: ea.DeliveryTag, multiple: false);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($" [⚠] Unexpected error: {ex.Message}");
+
+        // Nack without Requeue (Async in v7)
+        await channel.BasicNackAsync(deliveryTag: ea.DeliveryTag, multiple: false, requeue: false);
+    }
+};
+
+// Important: Set autoAck to false to use Manual Acknowledgements
+await channel.BasicConsumeAsync(queue: queueName,
+                                autoAck: false,
+                                consumer: consumer);
+
+Console.WriteLine(" [*] Consumer started with Manual Acknowledgement.");
+Console.WriteLine("Tip: Include the word 'error' in a message to simulate a processing failure.");
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();

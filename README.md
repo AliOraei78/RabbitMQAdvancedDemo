@@ -74,3 +74,18 @@ A complete RabbitMQ training project with .NET 8, designed as a professional por
 * Guaranteeing message delivery to RabbitMQ
 * Handling network and broker failures
 * The difference between Synchronous and Asynchronous Confirms
+
+## Day 6 – Consumer Acknowledgements (Ack/Nack)
+
+### Implemented
+
+* Manual Acknowledgement and Auto Acknowledgement
+* `BasicReject` and `BasicNack`
+* Message requeueing on processing failures
+* Consumer-level error handling
+
+### Key Concepts
+
+* The importance of Manual Acknowledgements in production environments
+* Preventing message loss
+* Controlling processing flow and implementing basic retry mechanisms
