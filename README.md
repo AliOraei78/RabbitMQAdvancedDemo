@@ -45,3 +45,17 @@ A complete RabbitMQ training project with .NET 8, designed as a professional por
 
 * The difference between Fanout and Direct Exchanges
 * Broadcast use cases (Notifications, Logging, Analytics)
+
+## Day 4 – Topic Exchange and Advanced Routing
+
+### Implemented
+
+* Implemented a Topic Exchange
+* Used wildcard patterns (`*` and `#`)
+* Designed meaningful routing keys
+* Configured bindings with different routing patterns
+
+### Key Concepts
+
+* The advantages of Topic Exchange over Direct and Fanout Exchanges
+* Applications in Event-Driven Systems
