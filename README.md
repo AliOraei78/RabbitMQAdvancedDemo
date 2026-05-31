@@ -104,3 +104,18 @@ A complete RabbitMQ training project with .NET 8, designed as a professional por
 * Preventing message loss
 * Isolating problematic messages from normal processing
 * Establishing the foundation for a Retry Mechanism
+
+## Day 8 - Retry Mechanism with Dead Lettering and Backoff
+
+### Completed:
+
+* Implemented a retry mechanism using TTL and Dead Letter Exchange (DLX)
+* Managed retry attempts using a Retry Count header
+* Implemented a basic backoff strategy with a 10-second delay
+* Moved messages to the Dead Letter Queue (DLQ) after exhausting all retry attempts
+
+### Key Concepts:
+
+* Retry pattern with Dead Lettering
+* Preventing message loss
+* Backoff strategy for controlled retry intervals

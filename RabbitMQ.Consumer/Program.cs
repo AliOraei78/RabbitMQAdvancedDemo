@@ -314,7 +314,6 @@ Console.WriteLine(" [*] Consumer started with Manual Acknowledgement.");
 Console.WriteLine("Tip: Include the word 'error' in a message to simulate a processing failure.");
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();
-*/
 
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -404,3 +403,138 @@ Console.WriteLine(" [*] Main consumer is running.");
 Console.WriteLine("Tip: To test the DLQ, include the word 'error' in a message.");
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();
+*/
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using System.Text;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+
+Console.WriteLine("=== RabbitMQ Consumer - Retry Mechanism with Backoff ===");
+
+var factory = new ConnectionFactory()
+{
+    HostName = "localhost",
+    UserName = "guest",
+    Password = "guest"
+};
+
+await using var connection = await factory.CreateConnectionAsync();
+await using var channel = await connection.CreateChannelAsync();
+
+// ====================== Retry Dead Letter Configuration ======================
+const string retryExchange = "order.retry.exchange";
+const string retryQueue = "order.retry.queue";
+const string dlxExchange = "order.dlx.exchange";
+const string dlqQueue = "order.deadletter.queue";
+
+var retryArgs = new Dictionary<string, object?>
+{
+    { "x-dead-letter-exchange", "order.main.exchange" },
+    { "x-dead-letter-routing-key", "order.process" },
+    { "x-message-ttl", 10000 }   // 10-second delay before retry
+};
+
+await channel.ExchangeDeclareAsync(retryExchange, ExchangeType.Direct, durable: true);
+await channel.QueueDeclareAsync(retryQueue, durable: true, exclusive: false, autoDelete: false, arguments: retryArgs);
+await channel.QueueBindAsync(retryQueue, retryExchange, "order.retry");
+
+await channel.ExchangeDeclareAsync(dlxExchange, ExchangeType.Direct, durable: true);
+await channel.QueueDeclareAsync(dlqQueue, durable: true, exclusive: false, autoDelete: false);
+await channel.QueueBindAsync(dlqQueue, dlxExchange, "order.failed");
+
+// ====================== Main Queue ======================
+var mainQueueArgs = new Dictionary<string, object?>
+{
+    { "x-dead-letter-exchange", retryExchange },
+    { "x-dead-letter-routing-key", "order.retry" }
+};
+
+const string mainQueue = "order.main.queue";
+await channel.QueueDeclareAsync(mainQueue, durable: true, exclusive: false, autoDelete: false, arguments: mainQueueArgs);
+
+int maxRetries = 3;
+
+// ====================== Consumer ======================
+var consumer = new AsyncEventingBasicConsumer(channel);
+
+consumer.ReceivedAsync += async (model, ea) =>
+{
+    var body = ea.Body.ToArray();
+    var message = Encoding.UTF8.GetString(body);
+
+    int retryCount = 0;
+    if (ea.BasicProperties.Headers != null && ea.BasicProperties.Headers.TryGetValue("x-retry-count", out var value))
+    {
+        if (value is int intValue) retryCount = intValue;
+        else if (value is long longValue) retryCount = (int)longValue;
+    }
+
+    try
+    {
+        Console.WriteLine($" [📥] Attempt {retryCount + 1} - Message: {message}");
+
+        if (message.Contains("error", StringComparison.OrdinalIgnoreCase))
+        {
+            if (retryCount < maxRetries - 1)
+            {
+                Console.WriteLine($" [⚠] Processing failed - retrying in 10 seconds (Retry Count: {retryCount + 1})");
+
+                var props = new BasicProperties
+                {
+                    Headers = new Dictionary<string, object?> { { "x-retry-count", retryCount + 1 } }
+                };
+
+                // FIXED: Included mandatory parameter
+                await channel.BasicPublishAsync(exchange: retryExchange,
+                                                routingKey: "order.retry",
+                                                mandatory: false,
+                                                basicProperties: props,
+                                                body: body);
+            }
+            else
+            {
+                Console.WriteLine(" [☠] Maximum retry attempts reached. Message moved to the DLQ.");
+                await channel.BasicPublishAsync(exchange: dlxExchange, routingKey: "order.failed", body: body);
+            }
+
+            await channel.BasicAckAsync(deliveryTag: ea.DeliveryTag, multiple: false);
+            return;
+        }
+
+        Console.WriteLine(" [✓] Processed successfully.");
+        await channel.BasicAckAsync(deliveryTag: ea.DeliveryTag, multiple: false);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($" [✗] Error: {ex.Message}");
+
+        if (retryCount < maxRetries - 1)
+        {
+            var props = new BasicProperties
+            {
+                Headers = new Dictionary<string, object?> { { "x-retry-count", retryCount + 1 } }
+            };
+
+            // FIXED: Included mandatory parameter
+            await channel.BasicPublishAsync(exchange: retryExchange,
+                                            routingKey: "order.retry",
+                                            mandatory: false,
+                                            basicProperties: props,
+                                            body: body);
+        }
+        else
+        {
+            Console.WriteLine(" [☠] Maximum retry attempts reached due to exception. Message moved to the DLQ.");
+            await channel.BasicPublishAsync(exchange: dlxExchange, routingKey: "order.failed", body: body);
+        }
+
+        await channel.BasicAckAsync(deliveryTag: ea.DeliveryTag, multiple: false);
+    }
+};
+
+await channel.BasicConsumeAsync(queue: mainQueue, autoAck: false, consumer: consumer);
+
+Console.WriteLine(" [*] Retry Mechanism enabled (maximum 3 attempts).");
+Console.WriteLine("To test retries, include the word 'error' in the message.");
+Console.ReadLine();
