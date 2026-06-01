@@ -135,3 +135,19 @@ A complete RabbitMQ training project with .NET 8, designed as a professional por
 * Efficient resource and memory management
 * TTL configuration at both the Queue and Message levels
 * Automatic cleanup of inactive queues and expired messages
+
+## Day 10 - Prefetch Count (QoS) and Consumer Parallelism
+
+### Completed:
+
+* Configured `BasicQos()` and Prefetch Count settings
+* Implemented Consumer Parallelism by running multiple consumer instances
+* Simulated heavy workloads to observe performance differences
+* Controlled consumer throughput and workload distribution
+
+### Key Concepts:
+
+* Balancing throughput and system stability
+* Preventing consumer overload
+* Efficient message distribution across multiple consumers
+* Performance tuning best practices in RabbitMQ

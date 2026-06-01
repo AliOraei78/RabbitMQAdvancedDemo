@@ -538,7 +538,6 @@ await channel.BasicConsumeAsync(queue: mainQueue, autoAck: false, consumer: cons
 Console.WriteLine(" [*] Retry Mechanism enabled (maximum 3 attempts).");
 Console.WriteLine("To test retries, include the word 'error' in the message.");
 Console.ReadLine();
-*/
 
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -596,5 +595,68 @@ await channel.BasicConsumeAsync(queue: queueName,
 
 Console.WriteLine(" [*] Consumer is running.");
 Console.WriteLine("Note: Messages expire after 15 seconds if set by producer, or 30 seconds by default.");
+Console.WriteLine("Press any key to exit...");
+Console.ReadKey();
+*/
+
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using System.Text;
+using System.Threading.Tasks;
+
+Console.WriteLine("=== RabbitMQ Consumer - Prefetch Count Demo ===");
+
+var factory = new ConnectionFactory()
+{
+    HostName = "localhost",
+    UserName = "guest",
+    Password = "guest"
+};
+
+// Use async methods and 'await using' for proper hardware-friendly disposal
+await using var connection = await factory.CreateConnectionAsync();
+await using var channel = await connection.CreateChannelAsync();
+
+const string queueName = "order.prefetch.queue";
+
+// Declare queue asynchronously (matches producer configuration)
+await channel.QueueDeclareAsync(queue: queueName, durable: true, exclusive: false, autoDelete: false);
+
+// ====================== CRITICAL: Prefetch QoS Setup ======================
+// BasicQos is now BasicQosAsync. 
+// Setting prefetchCount to 1 instructs RabbitMQ not to assign a new message 
+// to this consumer until its active message has been fully processed and acknowledged.
+ushort prefetchCount = 1;
+await channel.BasicQosAsync(prefetchSize: 0, prefetchCount: prefetchCount, global: false);
+
+Console.WriteLine($"[*] Prefetch Count set to {prefetchCount}.");
+Console.WriteLine("[*] Consumer will only hold 1 unacknowledged message in its local buffer.");
+
+// ====================== Consumer ======================
+// Use AsyncEventingBasicConsumer for v7
+var consumer = new AsyncEventingBasicConsumer(channel);
+
+consumer.ReceivedAsync += async (model, ea) =>
+{
+    var body = ea.Body.ToArray();
+    var message = Encoding.UTF8.GetString(body);
+
+    Console.WriteLine($" [📥] Received: {message}");
+
+    // Simulate complex/heavy business logic processing (2 seconds)
+    Console.WriteLine("     [⚙] Processing work...");
+    await Task.Delay(2000);
+
+    Console.WriteLine(" [✓] Processing complete.");
+
+    // BasicAck is now BasicAckAsync
+    await channel.BasicAckAsync(deliveryTag: ea.DeliveryTag, multiple: false);
+};
+
+// Start consuming messages asynchronously
+await channel.BasicConsumeAsync(queue: queueName, autoAck: false, consumer: consumer);
+
+Console.WriteLine(" [*] Consumer is running.");
+Console.WriteLine("Tip: Run multiple instances of this consumer to watch round-robin distribution in action.");
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();

@@ -423,7 +423,6 @@ while (true)
 
     Console.WriteLine($" [x] Order #{messageId} sent.");
 }
-*/
 
 using RabbitMQ.Client;
 using System.Text;
@@ -497,3 +496,52 @@ while (true)
 }
 
 Console.WriteLine("Producer stopped.");
+*/
+
+using RabbitMQ.Client;
+using System.Text;
+using System.Threading.Tasks;
+
+Console.WriteLine("=== RabbitMQ Producer - Prefetch Count Demo ===");
+
+var factory = new ConnectionFactory()
+{
+    HostName = "localhost",
+    UserName = "guest",
+    Password = "guest"
+};
+
+// Use async methods and 'await using' for proper hardware-friendly disposal
+await using var connection = await factory.CreateConnectionAsync();
+await using var channel = await connection.CreateChannelAsync();
+
+const string exchangeName = "order.prefetch.exchange";
+const string queueName = "order.prefetch.queue";
+
+// Topology setups are now fully async
+await channel.ExchangeDeclareAsync(exchange: exchangeName, type: ExchangeType.Direct, durable: true);
+await channel.QueueDeclareAsync(queue: queueName, durable: true, exclusive: false, autoDelete: false);
+await channel.QueueBindAsync(queue: queueName, exchange: exchangeName, routingKey: "order.process");
+
+Console.WriteLine("Producer is ready to send messages.");
+
+Console.WriteLine("Enter the number of messages you want to send:");
+if (!int.TryParse(Console.ReadLine(), out int count) || count < 1)
+    count = 20;
+
+for (int i = 1; i <= count; i++)
+{
+    string message = $"Order #{i} - Time: {DateTime.Now:HH:mm:ss}";
+    var body = Encoding.UTF8.GetBytes(message);
+
+    // BasicPublish is now BasicPublishAsync
+    await channel.BasicPublishAsync(exchange: exchangeName,
+                                    routingKey: "order.process",
+                                    body: body);
+
+    Console.WriteLine($" [x] Order #{i} sent.");
+}
+
+Console.WriteLine($"\n{count} messages were sent successfully.");
+Console.WriteLine("Press any key to exit...");
+Console.ReadKey();
