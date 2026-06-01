@@ -597,7 +597,7 @@ Console.WriteLine(" [*] Consumer is running.");
 Console.WriteLine("Note: Messages expire after 15 seconds if set by producer, or 30 seconds by default.");
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();
-*/
+
 
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -660,3 +660,108 @@ Console.WriteLine(" [*] Consumer is running.");
 Console.WriteLine("Tip: Run multiple instances of this consumer to watch round-robin distribution in action.");
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();
+
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using System;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+Console.WriteLine("=== RabbitMQ Consumer - Production Ready ===");
+
+// 'await using' handles clean asynchronous teardown of the connection pool
+await using var connectionManager = new RabbitMQConnectionManager();
+await using var channel = await connectionManager.CreateChannelAsync();
+
+const string queueName = "order.production.queue";
+
+// Asynchronous declaration of topology
+await channel.QueueDeclareAsync(queue: queueName,
+                                durable: true,
+                                exclusive: false,
+                                autoDelete: false);
+
+// Migrate to AsyncEventingBasicConsumer for the v7 architecture
+var consumer = new AsyncEventingBasicConsumer(channel);
+
+// Switch event wireup to 'ReceivedAsync' and handle via async-await syntax
+consumer.ReceivedAsync += async (model, ea) =>
+{
+    try
+    {
+        var body = ea.Body.ToArray();
+        var message = Encoding.UTF8.GetString(body);
+
+        Console.WriteLine($" [📥] Message received: {message}");
+
+        // Non-blocking processing delay instead of Thread.Sleep
+        await Task.Delay(1000);
+
+        // Acknowledge frames are now fully async
+        await channel.BasicAckAsync(deliveryTag: ea.DeliveryTag, multiple: false);
+        Console.WriteLine(" [✓] Message processed and acknowledged.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($" [✗] Processing error: {ex.Message}");
+
+        // Negative Acknowledge frames are now async as well
+        await channel.BasicNackAsync(deliveryTag: ea.DeliveryTag, multiple: false, requeue: false);
+    }
+};
+
+// Start subscribing to the queue asynchronously
+await channel.BasicConsumeAsync(queue: queueName,
+                                autoAck: false,
+                                consumer: consumer);
+
+Console.WriteLine(" [*] Production-ready consumer is running.");
+Console.WriteLine("Press Ctrl+C to exit...");
+
+// Block the main entry thread to keep the application host alive
+while (true)
+{
+    await Task.Delay(1000);
+}
+*/
+
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+
+Console.WriteLine("=== RabbitMQ Advanced Demo - Order Processing System (Consumers) ===\n");
+
+// 1. Kick off all asynchronous factory initializations concurrently
+var serviceTasks = new List<Task<RabbitMQConsumerService>>
+{
+    RabbitMQConsumerService.CreateAsync("order.main.queue", "OrderService", 5),
+    RabbitMQConsumerService.CreateAsync("order.payment.queue", "PaymentService", 3),
+    RabbitMQConsumerService.CreateAsync("order.notification.queue", "NotificationService", 10),
+    RabbitMQConsumerService.CreateAsync("order.analytics.queue", "AnalyticsService", 8)
+};
+
+// Await the completion of all connection and topology setups
+var services = await Task.WhenAll(serviceTasks);
+
+// 2. Start all consumer subscriptions asynchronously
+foreach (var service in services)
+{
+    await service.StartConsumingAsync();
+}
+
+Console.WriteLine("\n✅ All services are up and running.");
+Console.WriteLine("Press any key to exit and shutdown services gracefully...");
+
+// Keep the background listeners alive until a key is pressed
+Console.ReadKey();
+
+Console.WriteLine("\n[🛑] Shutting down services...");
+
+// 3. Clean up resources asynchronously via DisposeAsync
+foreach (var service in services)
+{
+    await service.DisposeAsync();
+}
+
+Console.WriteLine("System stopped cleanly.");

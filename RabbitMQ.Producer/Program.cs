@@ -496,7 +496,7 @@ while (true)
 }
 
 Console.WriteLine("Producer stopped.");
-*/
+
 
 using RabbitMQ.Client;
 using System.Text;
@@ -545,3 +545,135 @@ for (int i = 1; i <= count; i++)
 Console.WriteLine($"\n{count} messages were sent successfully.");
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();
+
+using RabbitMQ.Client;
+using System.Text;
+using System.Threading.Tasks;
+
+Console.WriteLine("=== RabbitMQ Producer - Production Ready ===");
+
+// 'await using' ensures proper asynchronous cleanup of resources
+await using var connectionManager = new RabbitMQConnectionManager();
+
+const string exchangeName = "order.production.exchange";
+const string queueName = "order.production.queue";
+
+// Now calls and awaits the asynchronous method returning Task<IChannel>
+await using var channel = await connectionManager.CreateChannelAsync();
+
+// Topology configurations must be asynchronously declared and awaited
+await channel.ExchangeDeclareAsync(exchange: exchangeName, type: ExchangeType.Direct, durable: true);
+await channel.QueueDeclareAsync(queue: queueName, durable: true, exclusive: false, autoDelete: false);
+await channel.QueueBindAsync(queue: queueName, exchange: exchangeName, routingKey: "order.created");
+
+Console.WriteLine("Producer connection is ready.");
+
+int messageId = 0;
+
+while (true)
+{
+    Console.WriteLine("\nEnter order details (or 'exit' to quit):");
+    string? input = Console.ReadLine();
+
+    if (input?.ToLower() == "exit") break;
+    if (string.IsNullOrWhiteSpace(input)) continue;
+
+    try
+    {
+        messageId++;
+
+        string message = $"Order #{messageId}: {input}";
+        var body = Encoding.UTF8.GetBytes(message);
+
+        // v7 Refactor: Instantiate BasicProperties directly. 
+        // CreateBasicProperties() has been removed from the channel interface.
+        var properties = new BasicProperties
+        {
+            DeliveryMode = DeliveryModes.Persistent // Marks the message as durable on disk
+        };
+
+        // BasicPublish is now BasicPublishAsync and requires the 'mandatory' argument
+        await channel.BasicPublishAsync(exchange: exchangeName,
+                                        routingKey: "order.created",
+                                        mandatory: false,
+                                        basicProperties: properties,
+                                        body: body);
+
+        Console.WriteLine($" [✓] Order #{messageId} sent successfully.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($" [✗] Error while sending message: {ex.Message}");
+    }
+}
+
+using System;
+using System.Threading.Tasks;
+
+Console.WriteLine("=== RabbitMQ Producer - Production Ready ===");
+
+// 1. Instantiate via the new Async Factory Method and track resource lifespan using 'await using'
+await using var producer = await RabbitMQProducerService.CreateAsync(
+    "order.production.exchange",
+    "order.created");
+
+int messageId = 0;
+
+while (true)
+{
+    Console.WriteLine("\nEnter order details (or 'exit' to quit):");
+    string? input = Console.ReadLine();
+
+    if (input?.ToLower() == "exit")
+        break;
+
+    if (string.IsNullOrWhiteSpace(input))
+        continue;
+
+    messageId++;
+
+    string message =
+        $"Order #{messageId}: {input} - {DateTime.Now:HH:mm:ss}";
+
+    // 2. Await the execution of the asynchronous message publishing loop
+    await producer.PublishAsync(message);
+}
+*/
+
+using System;
+using System.Threading.Tasks;
+
+Console.WriteLine("=== RabbitMQ Advanced Demo - Order Processing System ===");
+Console.WriteLine("=== Final Project - Combining All Concepts ===\n");
+
+// 1. Initialize using the async factory method and utilize 'await using' for non-blocking resource cleanup
+await using var producer = await RabbitMQProducerService.CreateAsync(
+    "order.main.exchange",
+    "order.created");
+
+int orderId = 0;
+
+while (true)
+{
+    Console.WriteLine("\nEnter order details (or 'exit' to quit):");
+    string? input = Console.ReadLine();
+
+    if (input?.ToLower() == "exit")
+        break;
+
+    if (string.IsNullOrWhiteSpace(input))
+        continue;
+
+    orderId++;
+
+    string message =
+        $"Order #{orderId} - {input} - {DateTime.Now:HH:mm:ss}";
+
+    // 2. Await the asynchronous wire frame publication
+    await producer.PublishAsync(message);
+
+    Console.WriteLine(
+        $" [📤] Order #{orderId} has been successfully created and published.");
+}
+
+Console.WriteLine("System stopped.");
