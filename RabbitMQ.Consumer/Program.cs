@@ -403,7 +403,7 @@ Console.WriteLine(" [*] Main consumer is running.");
 Console.WriteLine("Tip: To test the DLQ, include the word 'error' in a message.");
 Console.WriteLine("Press any key to exit...");
 Console.ReadKey();
-*/
+
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System.Text;
@@ -538,3 +538,63 @@ await channel.BasicConsumeAsync(queue: mainQueue, autoAck: false, consumer: cons
 Console.WriteLine(" [*] Retry Mechanism enabled (maximum 3 attempts).");
 Console.WriteLine("To test retries, include the word 'error' in the message.");
 Console.ReadLine();
+*/
+
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using System.Text;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+
+Console.WriteLine("=== RabbitMQ Consumer - Message TTL and Expiration ===");
+
+var factory = new ConnectionFactory()
+{
+    HostName = "localhost",
+    UserName = "guest",
+    Password = "guest"
+};
+
+// Use async methods and 'await using' for proper disposal
+await using var connection = await factory.CreateConnectionAsync();
+await using var channel = await connection.CreateChannelAsync();
+
+const string queueName = "order.ttl.queue";
+
+// PREEMPTIVE FIX: Matching the arguments from your Producer to prevent 406 PRECONDITION_FAILED
+var queueArgs = new Dictionary<string, object?>
+{
+    { "x-message-ttl", 30000 },     // Default TTL of 30 seconds for all messages
+    { "x-expires", 60000 }          // Delete the queue after 60 seconds of inactivity
+};
+
+await channel.QueueDeclareAsync(queue: queueName,
+                                durable: true,
+                                exclusive: false,
+                                autoDelete: false,
+                                arguments: queueArgs);
+
+// Use AsyncEventingBasicConsumer for v7
+var consumer = new AsyncEventingBasicConsumer(channel);
+
+// Mark lambda as 'async' to allow awaiting acknowledgement methods inside
+consumer.ReceivedAsync += async (model, ea) =>
+{
+    var body = ea.Body.ToArray();
+    var message = Encoding.UTF8.GetString(body);
+
+    Console.WriteLine($" [✓] Message received: {message}");
+
+    // BasicAck is now BasicAckAsync
+    await channel.BasicAckAsync(deliveryTag: ea.DeliveryTag, multiple: false);
+};
+
+// Start consuming messages asynchronously
+await channel.BasicConsumeAsync(queue: queueName,
+                                autoAck: false,
+                                consumer: consumer);
+
+Console.WriteLine(" [*] Consumer is running.");
+Console.WriteLine("Note: Messages expire after 15 seconds if set by producer, or 30 seconds by default.");
+Console.WriteLine("Press any key to exit...");
+Console.ReadKey();

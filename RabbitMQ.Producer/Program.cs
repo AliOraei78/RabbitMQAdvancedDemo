@@ -360,7 +360,6 @@ while (true)
 }
 
 Console.WriteLine("Producer stopped.");
-*/
 
 using RabbitMQ.Client;
 using System.Text;
@@ -424,3 +423,77 @@ while (true)
 
     Console.WriteLine($" [x] Order #{messageId} sent.");
 }
+*/
+
+using RabbitMQ.Client;
+using System.Text;
+using System.Collections.Generic;
+
+Console.WriteLine("=== RabbitMQ Producer - Message TTL and Expiration ===");
+
+var factory = new ConnectionFactory()
+{
+    HostName = "localhost",
+    UserName = "guest",
+    Password = "guest"
+};
+
+// Use async methods and 'await using' for proper disposal
+await using var connection = await factory.CreateConnectionAsync();
+await using var channel = await connection.CreateChannelAsync();
+
+const string exchangeName = "order.ttl.exchange";
+const string queueName = "order.ttl.queue";
+
+// Topology setups are now fully async
+await channel.ExchangeDeclareAsync(exchange: exchangeName, type: ExchangeType.Direct, durable: true);
+
+// Queue with TTL settings (updated dictionary value type to object?)
+var queueArgs = new Dictionary<string, object?>
+{
+    { "x-message-ttl", 30000 },     // Default TTL of 30 seconds for all messages
+    { "x-expires", 60000 }          // Delete the queue after 60 seconds of inactivity
+};
+
+await channel.QueueDeclareAsync(queue: queueName,
+                                durable: true,
+                                exclusive: false,
+                                autoDelete: false,
+                                arguments: queueArgs);
+
+await channel.QueueBindAsync(queue: queueName, exchange: exchangeName, routingKey: "order.process");
+
+Console.WriteLine("Queue with Message TTL and Queue Expiration has been created.");
+
+int messageId = 0;
+
+while (true)
+{
+    Console.WriteLine("\nEnter the message text (or 'exit' to quit):");
+    string? input = Console.ReadLine();
+
+    if (input?.ToLower() == "exit") break;
+    if (string.IsNullOrWhiteSpace(input)) continue;
+
+    messageId++;
+
+    string message = $"Order #{messageId}: {input} - Sent at: {DateTime.Now:HH:mm:ss}";
+    var body = Encoding.UTF8.GetBytes(message);
+
+    // In v7, instantiate BasicProperties directly instead of using CreateBasicProperties()
+    var properties = new BasicProperties
+    {
+        Expiration = "15000"   // Custom TTL for this message = 15 seconds
+    };
+
+    // BasicPublish is now BasicPublishAsync (Mandatory parameter required when passing BasicProperties)
+    await channel.BasicPublishAsync(exchange: exchangeName,
+                                    routingKey: "order.process",
+                                    mandatory: false,
+                                    basicProperties: properties,
+                                    body: body);
+
+    Console.WriteLine($" [x] Message #{messageId} sent (Message TTL: 15 seconds | Queue TTL: 30 seconds)");
+}
+
+Console.WriteLine("Producer stopped.");

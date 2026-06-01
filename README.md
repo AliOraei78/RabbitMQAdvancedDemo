@@ -119,3 +119,19 @@ A complete RabbitMQ training project with .NET 8, designed as a professional por
 * Retry pattern with Dead Lettering
 * Preventing message loss
 * Backoff strategy for controlled retry intervals
+
+## Day 9 - Message TTL, Queue TTL, and Expiration
+
+### Completed:
+
+* Configured Message TTL at both the per-message and queue levels
+* Configured Queue Expiration using the `x-expires` argument
+* Applied message-specific expiration using the `properties.Expiration` property
+* Managed expired messages and their lifecycle within RabbitMQ
+
+### Key Concepts:
+
+* Preventing the accumulation of stale messages
+* Efficient resource and memory management
+* TTL configuration at both the Queue and Message levels
+* Automatic cleanup of inactive queues and expired messages
